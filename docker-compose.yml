@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # Hadoop Services
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.1.3-java8
+    container_name: namenode
+    hostname: namenode
+    environment:
+      - CLUSTER_NAME=hadoop-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    ports:
+      - 9870:9870
+      - 8020:8020
+    volumes:
+      - ./data/hdfs/namenode:/hadoop/dfs/name
+    networks:
+      - hadoop-net
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.1.3-java8
+    container_name: datanode
+    hostname: datanode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    ports:
+      - 9864:9864
+    volumes:
+      - ./data/hdfs/datanode:/hadoop/dfs/data
+    depends_on:
+      - namenode
+    networks:
+      - hadoop-net
+
+  # Spark Services
+  spark-master:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark-master
+    hostname: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      - hadoop-net
+
+  spark-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark-worker
+    hostname: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=4g
+    depends_on:
+      - spark-master
+    networks:
+      - hadoop-net
+
+  # Kafka Services
+  kafka:
+    image: bitnami/kafka:3.5.0
+    container_name: kafka
+    hostname: kafka
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+    networks:
+      - hadoop-net
+
+  zookeeper:
+    image: bitnami/zookeeper:3.8.1
+    container_name: zookeeper
+    hostname: zookeeper
+    ports:
+      - 2181:2181
+    networks:
+      - hadoop-net
+
+  # Elasticsearch and Kibana
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.0.1
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+    ports:
+      - "9200:9200"
+    networks:
+      - hadoop-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.0.1
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - hadoop-net
+
+  # Python Service
+  python:
+    build:
+      context: .
+      dockerfile: ./python-scripts/Dockerfile  # Sử dụng Dockerfile để build image cho Python
+    container_name: python
+    hostname: python
+    volumes:
+      - ./python-scripts:/app  # Gắn thư mục code Python vào container
+    working_dir: /app
+    environment:
+      - HADOOP_NAMENODE_HOST=namenode
+      - SPARK_MASTER_HOST=spark-master
+      - KAFKA_BROKER_HOST=kafka:9092
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+    #command: python3 main.py  # Chạy script Python chính
+    command: tail -f /dev/null  # Giữ container chạy
+    depends_on:
+      - namenode
+      - spark-master
+      - kafka
+      - elasticsearch
+    networks:
+      - hadoop-net
+
+networks:
+  hadoop-net:
+    driver: bridge
+
+volumes:
+  hadoop-namenode:
+  hadoop-datanode:
