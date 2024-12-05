@@ -24,7 +24,11 @@ RUN pip install --no-cache-dir \
     pyspark \
     elasticsearch \
     requests \
-    pandas
+    pandas \
+    os \
+    json \
+    confluent-kafka
+
 
     
 EXPOSE 9093
