@@ -26,6 +26,8 @@ RUN pip install --no-cache-dir \
     requests \
     pandas
 
+    
+EXPOSE 9093
 # Sao chép mã nguồn vào container
 COPY . /app
 
