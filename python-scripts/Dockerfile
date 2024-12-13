@@ -25,8 +25,6 @@ RUN pip install --no-cache-dir \
     elasticsearch \
     requests \
     pandas \
-    os \
-    json \
     confluent-kafka
 
 

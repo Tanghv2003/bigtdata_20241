@@ -7,7 +7,7 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 # Đọc dữ liệu từ file .txt trên HDFS
-df = spark.read.text("hdfs://namenode:8020/tanghv/test.txt")
+df = spark.read.text("hdfs://namenode:8020/test/hello.txt")
 
 # Hiển thị nội dung dữ liệu
 df.show(truncate=False)  # Dùng truncate=False để hiển thị toàn bộ dòng
