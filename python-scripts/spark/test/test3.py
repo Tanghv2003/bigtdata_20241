@@ -1,22 +1,27 @@
 from pyspark.sql import SparkSession
 
-# Tạo một SparkSession và chỉ định Spark Master
+# Khởi tạo SparkSession kết nối đến Spark cluster
 spark = SparkSession.builder \
-    .appName("Submit to Spark Master") \
-    .master("spark://spark-master:7077") \
+    .appName("Test 2") \
+    .master("spark://masterhost:7077") \
+    .config("spark.executor.memory", "512mb") \
+    .config("spark.executor.cores", "1").config("spark.num.executors", "1")\
     .getOrCreate()
 
-# Kiểm tra nếu SparkSession đã được tạo thành công
-if spark.version:
-    print(f"Spark is running! Version: {spark.version}")
-else:
-    print("Spark session could not be created.")
+# Tạo một DataFrame đơn giản
+data = [("Alice", 34), ("Bob", 45), ("Cathy", 28)]
+columns = ["Name", "Age"]
 
-# Thực hiện một phép toán đơn giản trên RDD
-rdd = spark.sparkContext.parallelize([1, 2, 3, 4, 5])
-sum_result = rdd.reduce(lambda a, b: a + b)
+df = spark.createDataFrame(data, columns)
 
-print(f"Sum of elements in the RDD: {sum_result}")
+# Hiển thị DataFrame
+df.show()
 
-# Dừng SparkSession sau khi hoàn thành
+# Thực hiện một số phép toán trên DataFrame
+df_filtered = df.filter(df.Age > 30)
+
+# Hiển thị kết quả sau khi lọc
+df_filtered.show()
+
+# Dừng Spark session
 spark.stop()

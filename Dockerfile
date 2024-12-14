@@ -1,5 +1,5 @@
 # Sử dụng Spark image từ Bitnami
-FROM docker.io/bitnami/spark:3.3.2
+FROM docker.io/bitnami/spark:3.4.0
 
 
 # Chuyển sang quyền root để cài đặt thêm thư viện

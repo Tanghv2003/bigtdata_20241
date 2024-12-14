@@ -38,7 +38,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: spark-master
-    hostname: spark-master
+    hostname: masterhost
     environment:
       - SPARK_MODE=master
       - SPARK_MASTER_HOST=spark-master
