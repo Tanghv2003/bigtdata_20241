@@ -10,8 +10,8 @@ services:
       - CLUSTER_NAME=hadoop-cluster
       - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
     ports:
-      - 9870:9870
-      - 8020:8020
+      - "9870:9870"    # Web UI của HDFS
+      - "8020:8020"    # HDFS RPC port
     volumes:
       - ./data/hdfs/namenode:/hadoop/dfs/name
     networks:
@@ -24,7 +24,7 @@ services:
     environment:
       - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
     ports:
-      - 9864:9864
+      - "9864:9864"    # HDFS DataNode Web UI port
     volumes:
       - ./data/hdfs/datanode:/hadoop/dfs/data
     depends_on:
@@ -43,8 +43,8 @@ services:
       - SPARK_MODE=master
       - SPARK_MASTER_HOST=spark-master
     ports:
-      - "8080:8080"
-      - "7077:7077"
+      - "8080:8080"    # Spark Web UI
+      - "7077:7077"    # Spark master port
     networks:
       - hadoop-net
 
@@ -59,6 +59,8 @@ services:
       - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_MEMORY=1g
+    ports:
+      - "8081:8081"    # Spark worker Web UI
     depends_on:
       - spark-master
     networks:
@@ -71,7 +73,7 @@ services:
     networks:
       - hadoop-net
     ports:
-      - "2181:2181"
+      - "2181:2181"    # Zookeeper client port
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -84,41 +86,29 @@ services:
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"
-      - "9101:9101"
+      - "9092:9092"    # Kafka broker port
+      - "9101:9101"    # Kafka monitoring port
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ADVERTISED_HOST_NAME: kafka:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      # KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      # KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      # KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
-      # KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
-      # KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      # KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-
-      
 
   kafdrop:
     image: obsidiandynamics/kafdrop:3.27.0
+    container_name: kafdrop
     networks:
       - hadoop-net
     depends_on:
       - kafka
       - zookeeper
     ports:
-      - 19000:9000
+      - "19000:9000"   # Kafdrop UI port
     environment:
       KAFKA_BROKERCONNECT: kafka:29092
 
-  
-
-
-  
- 
   # Elasticsearch and Kibana
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.0.1
@@ -127,7 +117,7 @@ services:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
     ports:
-      - "9200:9200"
+      - "9200:9200"    # Elasticsearch port
     networks:
       - hadoop-net
 
@@ -137,7 +127,7 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
-      - "5601:5601"
+      - "5601:5601"    # Kibana UI port
     depends_on:
       - elasticsearch
     networks:
@@ -158,7 +148,6 @@ services:
       - SPARK_MASTER_HOST=spark-master
       - KAFKA_BROKER_HOST=kafka:9092
       - ELASTICSEARCH_HOST=http://elasticsearch:9200
-    #command: python3 main.py  # Chạy script Python chính
     command: tail -f /dev/null  # Giữ container chạy
     depends_on:
       - namenode
