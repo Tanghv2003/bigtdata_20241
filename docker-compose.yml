@@ -48,12 +48,12 @@ services:
     networks:
       - hadoop-net
 
-  spark-worker:
+  spark-worker-1:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: spark-worker
-    hostname: spark-worker
+    container_name: spark-worker-1
+    hostname: spark-worker-1
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
@@ -61,6 +61,42 @@ services:
       - SPARK_WORKER_MEMORY=1g
     ports:
       - "8081:8081"    # Spark worker Web UI
+    depends_on:
+      - spark-master
+    networks:
+      - hadoop-net
+
+  spark-worker-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark-worker-2
+    hostname: spark-worker-2
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=1g
+    ports:
+      - "8082:8081"    # Spark worker Web UI (different port to avoid conflict)
+    depends_on:
+      - spark-master
+    networks:
+      - hadoop-net
+
+  spark-worker-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark-worker-3
+    hostname: spark-worker-3
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=1g
+    ports:
+      - "8083:8081"    # Spark worker Web UI (different port to avoid conflict)
     depends_on:
       - spark-master
     networks:
