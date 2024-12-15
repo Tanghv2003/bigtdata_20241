@@ -25,7 +25,9 @@ RUN pip install --no-cache-dir \
     elasticsearch \
     requests \
     pandas \
-    confluent-kafka
+    confluent-kafka \
+    graphframes
+
 
 
     
