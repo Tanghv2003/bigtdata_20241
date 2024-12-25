@@ -62,7 +62,5 @@ print("PageRank của các sân bay:")
 page_rank.vertices.select("id", "pagerank").show()
 
 
-
-
 # Dừng Spark session
 spark.stop()
