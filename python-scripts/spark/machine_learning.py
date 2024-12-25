@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import roc_curve, auc
 from pyspark.ml.stat import Correlation
-
+from pyspark.sql.functions import when, col
 
 # Tạo SparkSession
 spark = SparkSession.builder \
@@ -75,6 +75,51 @@ print('Sau khi cân bằng:')
 balanced_flights_delayed.groupBy('label').count().show()
 
 # hồi quy logistic
+# one hot encoding
+# flightdata_delayed_label = flightdata_delayed_label.withColumn("CancellationCode", 
+#                   when(col("CancellationCode").isNull() | (col("CancellationCode") == "NA"), "UNKNOWN")
+#                   .otherwise(col("CancellationCode")))
+
+# # Kiểm tra lại các giá trị duy nhất trong cột CancellationCode
+# flightdata_delayed_label.select("CancellationCode").distinct().show()
+
+#one hot encoding cho các cột UniqueCarrier, Origin, Dest
+
+airline_indexer = StringIndexer(inputCol="UniqueCarrier", outputCol="UniqueCarrierIndex")
+airline_encoder = OneHotEncoder(inputCol="UniqueCarrierIndex", outputCol="UniqueCarrierVec")
+
+origin_indexer = StringIndexer(inputCol="Origin", outputCol="OriginIndex")
+origin_encoder = OneHotEncoder(inputCol="OriginIndex", outputCol="OriginVec")
+
+destination_indexer = StringIndexer(inputCol="Dest", outputCol="DestIndex")
+destination_encoder = OneHotEncoder(inputCol="DestIndex", outputCol="DestVec")
+
+
+assembler_one_hot = VectorAssembler(inputCols=["UniqueCarrierVec", "OriginVec", "DestVec"], outputCol="OneHotVec")
+
+# Tạo vector cho các cột số thực
+assembler_numeric = VectorAssembler(inputCols=["Month", "DayofMonth", "FlightNum", "CRSDepTime", "DepDelay", 
+                                               "Distance", "CRSArrTime", "Diverted", "Cancelled"], 
+                                    outputCol="NumericVec")
+
+# Kết hợp các cột one-hot và các cột số thực
+final_assembler = VectorAssembler(inputCols=["OneHotVec", "NumericVec"], outputCol="RAW_FEATURES")
+
+# Khai báo StandardScaler
+scaler = StandardScaler(inputCol="RAW_FEATURES", outputCol="FEATURES", withStd=True, withMean=False)
+
+# Đưa vào pipeline
+pipeline_encoder = Pipeline(stages=[
+    airline_indexer, airline_encoder,
+    origin_indexer, origin_encoder,
+    destination_indexer, destination_encoder,
+    assembler_one_hot, assembler_numeric, final_assembler, scaler
+])
+
+# Fit và transform dữ liệu
+pipeline_model_encoder = pipeline_encoder.fit(balanced_flights_delayed)
+
+
 
 
 

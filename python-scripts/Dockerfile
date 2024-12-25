@@ -5,6 +5,7 @@ FROM python:3.12-slim
 RUN apt-get update && \
     apt-get install -y openjdk-17-jdk && \
     apt-get install -y ant && \
+    apt-get install -y gcc g++ make python3-distutils && \
     apt-get clean;
 
 # Cài đặt các chứng chỉ cần thiết
@@ -26,7 +27,13 @@ RUN pip install --no-cache-dir \
     requests \
     pandas \
     confluent-kafka \
-    graphframes
+    graphframes \
+    matplotlib \
+    seaborn \
+    scikit-learn \
+    imbalanced-learn \
+    xgboost \
+    setuptools
 
 
 
