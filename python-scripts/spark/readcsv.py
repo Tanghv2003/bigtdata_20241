@@ -124,7 +124,14 @@ train_df, test_df = balanced_df.randomSplit([0.8, 0.2], seed=42)
 
 try:
     
+    
     model = pipeline.fit(train_df)
+    
+    
+    hdfs_model_path = "hdfs://namenode:8020/models/logistic_model"
+    model.write().overwrite().save(hdfs_model_path)
+    print(f"Model saved successfully at: {hdfs_model_path}")
+    
     
     predictions = model.transform(test_df)
     evaluator = BinaryClassificationEvaluator(

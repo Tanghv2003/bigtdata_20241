@@ -9,7 +9,6 @@ spark = SparkSession.builder \
     .config("spark.es.port", "9200") \
     .config("spark.es.index.auto.create", "true") \
     .config("spark.jars.packages", "graphframes:graphframes:0.8.2-spark3.0-s_2.12") \
-    .appName("Python Spark Job test") \
     .master("spark://spark-master:7077") \
     .getOrCreate()
 
