@@ -22,6 +22,8 @@ RUN echo "Downloading Spark JAR files..." && \
     curl -O https://repo1.maven.org/maven2/io/delta/delta-storage/2.3.0/delta-storage-2.3.0.jar && \
     curl -O https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.19/mysql-connector-java-8.0.19.jar && \
     curl -O https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.2/hadoop-aws-3.3.2.jar && \
+    curl -O https://repo1.maven.org/maven2/org/apache/spark/spark-sql-kafka-0-10_2.12/3.4.0/spark-sql-kafka-0-10_2.12-3.4.0.jar && \
+    curl -O https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.12/3.4.0/spark-token-provider-kafka-0-10_2.12-3.4.0.jar && \
     echo "Moving JAR files to Spark JAR directory..." && \
     mv s3-2.18.41.jar $SPARK_JARS_DIR && \
     mv aws-java-sdk-1.12.367.jar $SPARK_JARS_DIR && \
@@ -29,6 +31,8 @@ RUN echo "Downloading Spark JAR files..." && \
     mv delta-storage-2.3.0.jar $SPARK_JARS_DIR && \
     mv mysql-connector-java-8.0.19.jar $SPARK_JARS_DIR && \
     mv hadoop-aws-3.3.2.jar $SPARK_JARS_DIR && \
+    mv spark-sql-kafka-0-10_2.12-3.4.0.jar $SPARK_JARS_DIR && \
+    mv spark-token-provider-kafka-0-10_2.12-3.4.0.jar $SPARK_JARS_DIR && \
     rm -f *.jar
 
 # Kiểm tra sự tồn tại của tệp spark-class
