@@ -107,7 +107,7 @@ class FlightProcessor:
                     'Distance': flight.get('estDepartureAirportHorizDistance', 0),
                     'CRSArrTime': arr_time.strftime('%H%M'),
                     'Diverted': 1 if flight.get('diverted', False) else 0,
-                    'Cancelled': 0,
+                    'Cancelled': 0, # mặc định trả về là 0
                     'RouteType': 'Domestic' if origin[:2] == dest[:2] else 'International'
                 }
                 processed_data.append(flight_data)
