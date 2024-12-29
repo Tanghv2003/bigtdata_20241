@@ -33,7 +33,8 @@ RUN pip install --no-cache-dir \
     scikit-learn \
     imbalanced-learn \
     xgboost \
-    setuptools
+    setuptools \
+    kafka-python-ng
 
 
 
