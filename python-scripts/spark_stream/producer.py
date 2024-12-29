@@ -70,6 +70,7 @@ class FlightKafkaProducer:
     
     def send_flight_data(self, flight_data):
         self.producer.send(self.topic, flight_data)
+        time.sleep(1)
         self.producer.flush()
         print("Flight data sent to Kafka")
 
