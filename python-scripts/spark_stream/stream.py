@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json, current_timestamp
+from pyspark.sql.functions import col, from_json, current_timestamp, count
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, TimestampType
 import time
 from datetime import datetime
@@ -10,7 +10,7 @@ class SparkKafkaConsumer:
         self.kafka_topic = kafka_topic
         self.spark = None
         self.streaming_query = None
-        self.user = "Tanghv2003"  # Current user
+        self.user = "Tanghv2003"
         self.start_time = datetime.utcnow()
 
     def create_spark_session(self):
@@ -58,10 +58,16 @@ class SparkKafkaConsumer:
                 .load())
 
     def process_stream(self, kafka_df, schema):
-        """Process streaming data"""
-        return (kafka_df.selectExpr("CAST(value AS STRING) as json")
-                .select(from_json("json", schema).alias("data"))
-                .select("data.*"))
+        """Process streaming data with aggregation by carrier"""
+        # Parse JSON data
+        parsed_df = (kafka_df.selectExpr("CAST(value AS STRING) as json")
+                    .select(from_json("json", schema).alias("data"))
+                    .select("data.*"))
+        
+        # Group by carrier and count flights
+        return (parsed_df.groupBy("UniqueCarrier")
+                .agg(count("*").alias("TotalFlights"))
+                .orderBy("UniqueCarrier"))
 
     def start_streaming(self):
         """Start the streaming process"""
@@ -74,26 +80,26 @@ class SparkKafkaConsumer:
             schema = self.define_schema()
             kafka_stream = self.create_kafka_stream()
 
-            # Process stream
-            processed_df = self.process_stream(kafka_stream, schema)
+            # Process stream with aggregation
+            aggregated_df = self.process_stream(kafka_stream, schema)
 
-            # Start console output
-            self.streaming_query = (processed_df.writeStream
+            # Start console output with complete mode to see all counts
+            self.streaming_query = (aggregated_df.writeStream
                                   .format("console")
-                                  .outputMode("append")
+                                  .outputMode("complete")  # Use complete mode to see all aggregations
                                   .option("truncate", False)
                                   .trigger(processingTime="5 seconds")
                                   .start())
 
             print(f"""
             ========================================
-            Streaming Started Successfully
+            Flight Counter Streaming Started
             ----------------------------------------
             Topic: {self.kafka_topic}
             Current Time (UTC): {datetime.utcnow()}
             User: {self.user}
             ----------------------------------------
-            Waiting for data...
+            Calculating total flights per carrier...
             Press Ctrl+C to stop
             ========================================
             """)
@@ -125,7 +131,7 @@ class SparkKafkaConsumer:
 
 def main():
     consumer = SparkKafkaConsumer(
-        app_name="FlightDataConsumer",
+        app_name="FlightDataCounter",
         kafka_topic="flights"
     )
     
