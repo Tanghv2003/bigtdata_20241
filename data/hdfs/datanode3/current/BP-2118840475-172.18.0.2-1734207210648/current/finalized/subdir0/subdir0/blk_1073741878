@@ -1,0 +1,1 @@
+{"class":"org.apache.spark.ml.feature.OneHotEncoderModel","timestamp":1735813962623,"sparkVersion":"3.5.4","uid":"OneHotEncoder_ef3249ecd687","paramMap":{"outputCol":"DivertedVec","inputCol":"DivertedIndex","handleInvalid":"keep"},"defaultParamMap":{"dropLast":true,"outputCol":"OneHotEncoder_ef3249ecd687__output","handleInvalid":"error"}}

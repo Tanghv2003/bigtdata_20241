@@ -1,124 +1,156 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
-from graphframes import GraphFrame
-from pyspark.sql.types import *
-
-from pyspark.ml.feature import StringIndexer, OneHotEncoder, VectorAssembler, StandardScaler, MinMaxScaler
+from pyspark.sql.functions import col, when
+from pyspark.ml.feature import StringIndexer, OneHotEncoder, VectorAssembler, StandardScaler, Imputer
 from pyspark.ml import Pipeline
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import roc_curve, auc
-from pyspark.ml.stat import Correlation
-from pyspark.sql.functions import when, col
-
-# Tạo SparkSession
+# Tạo Spark session
 spark = SparkSession.builder \
-    .appName("Airlines Machine Learning") \
-    .config("spark.es.nodes", "elasticsearch") \
-    .config("spark.es.port", "9200") \
-    .config("spark.es.index.auto.create", "true") \
-    .config("spark.jars.packages", "graphframes:graphframes:0.8.2-spark3.0-s_2.12") \
+    .appName("Airlines Delay Prediction") \
     .master("spark://spark-master:7077") \
     .getOrCreate()
 
-# HDFS file path
-hdfs_file_path = "hdfs://namenode:8020/upload/data.csv"
+# Load và kiểm tra dữ liệu
+df = spark.read.option("header", "true").csv("hdfs://namenode:8020/upload/data.csv")
+print("Số lượng dòng ban đầu:", df.count())
+print("Schema ban đầu:")
+df.printSchema()
 
-# Đọc dữ liệu vào DataFrame
-df = spark.read.option("header", "true").csv(hdfs_file_path)
+# Xử lý dữ liệu null
+df = df.na.drop(subset=["ArrDelay"])
+print("Số lượng dòng sau khi xóa null:", df.count())
 
-# tiền xử lí dữ liệu : xóa null -> lọc trùng -> cân bằng dữ liệu nếu cần
+# Chuyển đổi kiểu dữ liệu cho các cột số
+numeric_columns = ["ArrDelay", "Month", "DayofMonth", "DayOfWeek", "Year", 
+                  "CRSElapsedTime", "Distance", "DepDelay"]
+for col_name in numeric_columns:
+    df = df.withColumn(col_name, col(col_name).cast("double"))
 
-num_data_missing_arr_delay = df.filter("ArrDelay IS NULL").count()
-print(f"Số dòng thiếu giá trị ArrDelay: {num_data_missing_arr_delay}")
-
-
-flightdata_delayed = df.filter((df.ArrDelay.isNotNull()) & (df.ArrDelay != "NA"))
-print(f"Số dòng dữ liệu sau khi xóa là {flightdata_delayed.count()}")
-
-flightdata_delayed_label = flightdata_delayed.withColumn(
-    'Label', 
-    (col('ArrDelay') >= 15).cast(IntegerType())
+# Tạo nhãn delay
+df = df.withColumn("DelayCategory",
+    when(col("ArrDelay") < 15, 0)
+    .when((col("ArrDelay") >= 15) & (col("ArrDelay") < 45), 1)
+    .when((col("ArrDelay") >= 45) & (col("ArrDelay") < 90), 2)
+    .when((col("ArrDelay") >= 90) & (col("ArrDelay") < 150), 3)
+    .when((col("ArrDelay") >= 150) & (col("ArrDelay") < 240), 4)
+    .otherwise(5)
 )
 
-flightdata_delayed_label.select("ArrDelay", "Label").show(10)
+# Kiểm tra phân phối của nhãn
+print("\nPhân phối của DelayCategory:")
+df.groupBy("DelayCategory").count().orderBy("DelayCategory").show()
 
+# Định nghĩa features
+categorical_features = ["UniqueCarrier", "Origin", "Dest", "Diverted"]
+numeric_features = ["Month", "DayofMonth", "DayOfWeek", "Year", 
+                   "CRSElapsedTime", "Distance", "DepDelay"]
 
+# Kiểm tra và xử lý null trong features
+df = df.na.fill(0, numeric_features)  # Fill 0 cho numeric features
+df = df.na.fill("UNKNOWN", categorical_features)  # Fill "UNKNOWN" cho categorical features
 
-########################
-delay_each_airline = flightdata_delayed_label.filter(flightdata_delayed_label["Label"] == 1) \
-    .groupBy("UniqueCarrier","Label").count().withColumnRenamed("count", "Delay")
-delay_each_airline.show(10)
+# Tạo pipeline stages
+indexers = [StringIndexer(inputCol=feat, outputCol=f"{feat}Index", handleInvalid="keep") 
+           for feat in categorical_features]
+encoders = [OneHotEncoder(inputCol=f"{feat}Index", outputCol=f"{feat}Vec", handleInvalid="keep") 
+           for feat in categorical_features]
 
-total_each_airline = flightdata_delayed_label.groupBy("UniqueCarrier").count().withColumnRenamed("count", "Total")
-total_each_airline.show(10)
+# Imputer cho numeric features
+imputer = Imputer(
+    inputCols=numeric_features,
+    outputCols=numeric_features,
+    strategy="mean"
+)
 
-delay_percentage = delay_each_airline.join(total_each_airline, on="UniqueCarrier") \
-    .withColumn("DelayPercentage", (delay_each_airline["Delay"] / total_each_airline["Total"]) * 100) ## update gửi kq về database
-delay_percentage.show(10)
+# Vector Assembler với error handling
+assembler = VectorAssembler(
+    inputCols=numeric_features + [f"{feat}Vec" for feat in categorical_features],
+    outputCol="raw_features",
+    handleInvalid="keep"
+)
 
-# xử lí mất cân bằng dữ liệu
+# Scaler
+scaler = StandardScaler(
+    inputCol="raw_features",
+    outputCol="features",
+    withStd=True,
+    withMean=False
+)
 
-print('Trước khi cân bằng:')
-flightdata_delayed_label.groupBy('Label').count().show()
+# Logistic Regression
+lr = LogisticRegression(
+    featuresCol="features",
+    labelCol="DelayCategory",
+    maxIter=10,
+    family="multinomial"
+)
 
-major_class_flights = flightdata_delayed_label.filter(flightdata_delayed_label.Label == 0)
-minor_class_flights = flightdata_delayed_label.filter(flightdata_delayed_label.Label == 1)
+# Tạo và train pipeline
+try:
+    pipeline = Pipeline(stages=indexers + encoders + [imputer, assembler, scaler, lr])
+    
+    # Split data
+    train_data, test_data = df.randomSplit([0.8, 0.2], seed=42)
+    print("\nSố lượng dữ liệu train:", train_data.count())
+    print("Số lượng dữ liệu test:", test_data.count())
+    
+    # Fit model
+    print("\nBắt đầu training model...")
+    model = pipeline.fit(train_data)
+    print("Hoàn thành training model")
+    
+    # Lưu model lên HDFS
+    model_path = "hdfs://namenode:8020/models/airline_delay_prediction"
+    model.write().overwrite().save(model_path)
+    print(f"\nĐã lưu model tại: {model_path}")
+    
+    # Load model từ HDFS để kiểm tra
+    from pyspark.ml import PipelineModel
+    loaded_model = PipelineModel.load(model_path)
+    print("Đã load model thành công")
+    
+    # Predictions với loaded model
+    predictions = loaded_model.transform(test_data)
+    
+    # Evaluate
+    evaluator = MulticlassClassificationEvaluator(
+        labelCol="DelayCategory",
+        predictionCol="prediction",
+        metricName="accuracy"
+    )
+    accuracy = evaluator.evaluate(predictions)
+    print(f"\nĐộ chính xác của model: {accuracy}")
+    
+    # Show sample predictions
+    print("\nMẫu dự đoán:")
+    predictions.select("DelayCategory", "prediction", "probability").show(20)
 
-ratio = minor_class_flights.count() / major_class_flights.count()
-balanced_flights_delayed = major_class_flights.sample(withReplacement=True, fraction=ratio, seed=631).union(minor_class_flights)
+    # Lưu metadata của model
+    model_metadata = {
+        "accuracy": accuracy,
+        "features": {
+            "categorical": categorical_features,
+            "numeric": numeric_features
+        },
+        "training_date": spark.sql("SELECT current_timestamp()").collect()[0][0]
+    }
+    
+    # Lưu metadata dưới dạng JSON
+    import json
+    metadata_path = "hdfs://namenode:8020/models/airline_delay_prediction_metadata.json"
+    with open("/tmp/metadata.json", "w") as f:
+        json.dump(model_metadata, f)
+    
+    # Copy file từ local lên HDFS
+    from subprocess import call
+    call(["hdfs", "dfs", "-put", "-f", "/tmp/metadata.json", metadata_path])
+    print(f"\nĐã lưu metadata tại: {metadata_path}")
 
-print('Sau khi cân bằng:')
-balanced_flights_delayed.groupBy('label').count().show()
-
-# hồi quy logistic
-# one hot encoding
-# flightdata_delayed_label = flightdata_delayed_label.withColumn("CancellationCode", 
-#                   when(col("CancellationCode").isNull() | (col("CancellationCode") == "NA"), "UNKNOWN")
-#                   .otherwise(col("CancellationCode")))
-
-# # Kiểm tra lại các giá trị duy nhất trong cột CancellationCode
-# flightdata_delayed_label.select("CancellationCode").distinct().show()
-
-#one hot encoding cho các cột UniqueCarrier, Origin, Dest
-
-airline_indexer = StringIndexer(inputCol="UniqueCarrier", outputCol="UniqueCarrierIndex")
-airline_encoder = OneHotEncoder(inputCol="UniqueCarrierIndex", outputCol="UniqueCarrierVec")
-
-origin_indexer = StringIndexer(inputCol="Origin", outputCol="OriginIndex")
-origin_encoder = OneHotEncoder(inputCol="OriginIndex", outputCol="OriginVec")
-
-destination_indexer = StringIndexer(inputCol="Dest", outputCol="DestIndex")
-destination_encoder = OneHotEncoder(inputCol="DestIndex", outputCol="DestVec")
-
-
-assembler_one_hot = VectorAssembler(inputCols=["UniqueCarrierVec", "OriginVec", "DestVec"], outputCol="OneHotVec")
-
-# Tạo vector cho các cột số thực
-assembler_numeric = VectorAssembler(inputCols=["Month", "DayofMonth", "FlightNum", "CRSDepTime", "DepDelay", 
-                                               "Distance", "CRSArrTime", "Diverted", "Cancelled"], 
-                                    outputCol="NumericVec")
-
-# Kết hợp các cột one-hot và các cột số thực
-final_assembler = VectorAssembler(inputCols=["OneHotVec", "NumericVec"], outputCol="RAW_FEATURES")
-
-# Khai báo StandardScaler
-scaler = StandardScaler(inputCol="RAW_FEATURES", outputCol="FEATURES", withStd=True, withMean=False)
-
-# Đưa vào pipeline
-pipeline_encoder = Pipeline(stages=[
-    airline_indexer, airline_encoder,
-    origin_indexer, origin_encoder,
-    destination_indexer, destination_encoder,
-    assembler_one_hot, assembler_numeric, final_assembler, scaler
-])
-
-# Fit và transform dữ liệu
-pipeline_model_encoder = pipeline_encoder.fit(balanced_flights_delayed)
-
-
-
-
-
+except Exception as e:
+    print("\nLỗi trong quá trình training hoặc lưu model:")
+    print(str(e))
+    
+finally:
+    # Stop Spark session
+    spark.stop()
