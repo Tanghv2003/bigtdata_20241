@@ -101,7 +101,7 @@ class SparkKafkaConsumer:
             kafka_stream = self.create_kafka_stream()
 
             # Load the pre-trained model from HDFS
-            model_path = "hdfs://namenode:8020/models/airline_delay_prediction"
+            model_path = "hdfs://namenode:8020/models/best_rf_model"
             model = self.load_model(model_path)
 
             # Process stream with model prediction
