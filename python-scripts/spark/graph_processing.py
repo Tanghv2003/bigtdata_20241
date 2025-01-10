@@ -17,48 +17,63 @@ checkpoint_dir = "hdfs://namenode:8020/tmp/checkpoint"
 spark.sparkContext.setCheckpointDir(checkpoint_dir)
 
 # HDFS file path
-hdfs_file_path = "hdfs://namenode:8020/upload/data.csv"
+hdfs_file_path = "hdfs://namenode:8020/upload/2009.csv"
 
-# Đọc dữ liệu vào DataFrame
-df = spark.read.option("header", "true").csv(hdfs_file_path)
+# Đọc dữ liệu vào DataFrame với schema phù hợp
+df = spark.read \
+    .option("header", "true") \
+    .option("inferSchema", "true") \
+    .csv(hdfs_file_path)
 
-# Chuyển đổi các cột sang kiểu dữ liệu phù hợp
-df = df.withColumn("Distance", col("Distance").cast("int")) \
-    .withColumn("DepDelay", col("DepDelay").cast("int")) \
-    .withColumn("ArrDelay", col("ArrDelay").cast("int"))
+# Chuyển đổi các cột sang kiểu dữ liệu phù hợp và chọn các cột cần thiết
+df_cleaned = df.select(
+    "FL_DATE",
+    "OP_CARRIER",
+    "OP_CARRIER_FL_NUM",
+    "ORIGIN",
+    "DEST",
+    col("DEP_DELAY").cast("double"),
+    col("ARR_DELAY").cast("double"),
+    col("DISTANCE").cast("double"),
+    col("CANCELLED").cast("double"),
+    col("DIVERTED").cast("double")
+).na.fill(0)  # Điền giá trị null bằng 0
 
-# Tạo các đỉnh (sân bay) từ các cột 'Origin' và 'Dest'
-vertices = df.select("Origin").distinct().withColumnRenamed("Origin", "id") \
-    .union(df.select("Dest").distinct().withColumnRenamed("Dest", "id"))
+# Tạo các đỉnh (sân bay) từ các cột 'ORIGIN' và 'DEST'
+vertices = df_cleaned.select("ORIGIN").distinct().withColumnRenamed("ORIGIN", "id") \
+    .union(df_cleaned.select("DEST").distinct().withColumnRenamed("DEST", "id"))
 
-# Hiển thị các đỉnh
-vertices.show()
-
-# Tạo các cạnh giữa các sân bay (Origin -> Dest)
-edges = df.select(
-    col("Origin").alias("src"), 
-    col("Dest").alias("dst"),
-    col("Distance").alias("distance"),  # Thuộc tính trọng số là 'Distance'
-    col("DepDelay").alias("departure_delay"),  # Thuộc tính delay khởi hành
-    col("ArrDelay").alias("arrival_delay")  # Thuộc tính delay đến
+# Tạo các cạnh với thông tin chi tiết hơn
+edges = df_cleaned.select(
+    col("ORIGIN").alias("src"),
+    col("DEST").alias("dst"),
+    col("DISTANCE").alias("distance"),
+    col("DEP_DELAY").alias("departure_delay"),
+    col("ARR_DELAY").alias("arrival_delay"),
+    col("OP_CARRIER").alias("carrier"),
+    col("CANCELLED").alias("cancelled"),
+    col("DIVERTED").alias("diverted")
 )
-
-# Hiển thị các cạnh
-edges.show()
 
 # Tạo GraphFrame từ các đỉnh và các cạnh
 graph = GraphFrame(vertices, edges)
 
-# Hiển thị thông tin về đồ thị
-print(f"Đỉnh: {graph.vertices.count()}")
-print(f"Cạnh: {graph.edges.count()}")
+# Hiển thị thông tin cơ bản về đồ thị
+print("Thống kê đồ thị:")
+print(f"Số lượng sân bay (đỉnh): {graph.vertices.count()}")
+print(f"Số lượng chuyến bay (cạnh): {graph.edges.count()}")
 
-# Áp dụng thuật toán PageRank chỉ ra sân bay bận rộn nhất
+# Áp dụng PageRank để xác định sân bay quan trọng nhất
 page_rank = graph.pageRank(resetProbability=0.15, maxIter=10)
 
-# Hiển thị giá trị PageRank của các đỉnh
-print("PageRank của các sân bay:")
-page_rank.vertices.select("id", "pagerank").show()
+# Hiển thị top 10 sân bay có PageRank cao nhất
+print("\nTop 10 sân bay quan trọng nhất:")
+page_rank.vertices \
+    .select("id", "pagerank") \
+    .orderBy(col("pagerank").desc()) \
+    .limit(10) \
+    .show()
+
 
 
 # Dừng Spark session

@@ -174,35 +174,56 @@ services:
     networks:
       - hadoop-net
 
-  # Kafka Services
   zookeeper:
     image: confluentinc/cp-zookeeper:6.2.0
     container_name: zookeeper
     networks:
       - hadoop-net
     ports:
-      - "2181:2181"    # Zookeeper client port
+      - "2181:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
-  kafka:
+  kafka1:
     image: confluentinc/cp-kafka:6.2.0
-    container_name: kafka
+    container_name: kafka1
     networks:
       - hadoop-net
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"    # Kafka broker port
-      - "9101:9101"    # Kafka monitoring port
+      - "9092:9092"
+      - "9101:9101"
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ADVERTISED_HOST_NAME: kafka:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+
+  kafka2:
+    image: confluentinc/cp-kafka:6.2.0
+    container_name: kafka2
+    networks:
+      - hadoop-net
+    depends_on:
+      - zookeeper
+    ports:
+      - "9093:9093"
+      - "9102:9102"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:29093,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 2
 
   kafdrop:
     image: obsidiandynamics/kafdrop:3.27.0
@@ -210,36 +231,15 @@ services:
     networks:
       - hadoop-net
     depends_on:
-      - kafka
+      - kafka1
+      - kafka2
       - zookeeper
     ports:
-      - "19000:9000"   # Kafdrop UI port
+      - "19000:9000"
     environment:
-      KAFKA_BROKERCONNECT: kafka:29092
+      KAFKA_BROKERCONNECT: kafka1:29092,kafka2:29093
 
-  # Elasticsearch and Kibana
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.0.1
-    container_name: elasticsearch
-    environment:
-      - discovery.type=single-node
-      - bootstrap.memory_lock=true
-    ports:
-      - "9200:9200"    # Elasticsearch port
-    networks:
-      - hadoop-net
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:7.0.1
-    container_name: kibana
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    ports:
-      - "5601:5601"    # Kibana UI port
-    depends_on:
-      - elasticsearch
-    networks:
-      - hadoop-net
+  
 
   # Python Service
   python:
@@ -260,8 +260,8 @@ services:
     depends_on:
       - namenode
       - spark-master
-      - kafka
-      - elasticsearch
+      - kafka1
+      - kafka2
     networks:
       - hadoop-net
 
