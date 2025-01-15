@@ -1,1 +1,0 @@
-{"class":"org.apache.spark.ml.feature.OneHotEncoderModel","timestamp":1736483950439,"sparkVersion":"3.5.4","uid":"OneHotEncoder_0d52cd166a98","paramMap":{"outputCol":"RouteTypeVec","inputCol":"RouteTypeIndex","handleInvalid":"keep"},"defaultParamMap":{"outputCol":"OneHotEncoder_0d52cd166a98__output","handleInvalid":"error","dropLast":true}}
