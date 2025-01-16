@@ -3,12 +3,12 @@ from pyspark.sql.functions import col, when, hour, minute, rand
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
 from pyspark.ml.feature import StringIndexer, OneHotEncoder, VectorAssembler, StandardScaler
 from pyspark.ml import Pipeline
-from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 
 # Tạo Spark session
 spark = SparkSession.builder \
-    .appName("Flight Delay Prediction") \
+    .appName("Flight Delay Prediction RF") \
     .master("spark://spark-master:7077") \
     .getOrCreate()
 
@@ -96,30 +96,24 @@ try:
     # Vector Assembler
     assembler = VectorAssembler(
         inputCols=numeric_features + [f"{feat}Vec" for feat in categorical_features],
-        outputCol="raw_features",
+        outputCol="features",
         handleInvalid="keep"
     )
 
-    # Scaler
-    scaler = StandardScaler(
-        inputCol="raw_features",
-        outputCol="features",
-        withStd=True,
-        withMean=False
-    )
-
-    # Logistic Regression với các tham số được điều chỉnh
-    lr = LogisticRegression(
+    # Random Forest Classifier với các tham số được điều chỉnh
+    rf = RandomForestClassifier(
         featuresCol="features",
         labelCol="DelayCategory",
-        maxIter=50,  # Tăng số lần lặp
-        family="multinomial",
-        elasticNetParam=0.3,
-        regParam=0.01  # Thêm regularization
+        numTrees=100,          # Số lượng cây
+        maxDepth=10,           # Độ sâu tối đa của mỗi cây
+        maxBins=32,            # Số bins tối đa cho continuous features
+        minInstancesPerNode=1, # Số mẫu tối thiểu trong mỗi node
+        impurity="gini",       # Độ đo impurity (gini hoặc entropy)
+        seed=42
     )
 
     # Tạo và train pipeline
-    pipeline = Pipeline(stages=indexers + encoders + [assembler, scaler, lr])
+    pipeline = Pipeline(stages=indexers + encoders + [assembler, rf])
     
     # Split data
     train_data, test_data = balanced_df.randomSplit([0.8, 0.2], seed=42)
@@ -132,7 +126,7 @@ try:
     print("Hoàn thành training model")
     
     # Lưu model
-    model_path = "hdfs://namenode:8020/models/log_model"
+    model_path = "hdfs://namenode:8020/models/rf_model"
     model.write().overwrite().save(model_path)
     print(f"\nĐã lưu model tại: {model_path}")
     
@@ -166,6 +160,14 @@ try:
               .orderBy("DelayCategory", "prediction") \
               .show()
 
+    # Lấy và hiển thị feature importance
+    rf_model = model.stages[-1]
+    feature_importance = list(zip(numeric_features + [f"{feat}Vec" for feat in categorical_features],
+                                rf_model.featureImportances))
+    print("\nFeature Importances:")
+    for feature, importance in sorted(feature_importance, key=lambda x: x[1], reverse=True):
+        print(f"{feature}: {importance:.4f}")
+
     # Lưu metadata
     model_metadata = {
         "metrics": {
@@ -176,12 +178,18 @@ try:
             "categorical": categorical_features,
             "numeric": numeric_features
         },
+        "model_params": {
+            "numTrees": rf_model.getNumTrees,
+            "maxDepth": rf_model.getMaxDepth,
+            "featureSubsetStrategy": rf_model.getFeatureSubsetStrategy,
+            "impurity": rf_model.getImpurity
+        },
         "training_date": spark.sql("SELECT current_timestamp()").collect()[0][0].strftime("%Y-%m-%d %H:%M:%S")
     }
     
     # Lưu metadata
     import json
-    metadata_path = "hdfs://namenode:8020/models/flight_delay_prediction_metadata.json"
+    metadata_path = "hdfs://namenode:8020/models/rf_model_metadata.json"
     with open("/tmp/metadata.json", "w") as f:
         json.dump(model_metadata, f)
     

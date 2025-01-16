@@ -6,7 +6,7 @@ client = InsecureClient('http://namenode:9870', user='root')
 
 # Đường dẫn file trên hệ thống local và trên HDFS
 local_file_path = '../dl/data.csv'  # Thay thế với đường dẫn file trên hệ thống local
-hdfs_file_path = '/upload/data.csv'           # Đường dẫn nơi bạn muốn upload lên HDFS
+hdfs_file_path = '/upload/fl_data.csv'           # Đường dẫn nơi bạn muốn upload lên HDFS
 
 # Kiểm tra xem file có tồn tại trên hệ thống local không
 if os.path.exists(local_file_path):

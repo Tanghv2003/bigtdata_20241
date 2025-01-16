@@ -70,7 +70,7 @@ class FlightKafkaProducer:
     
     def send_flight_data(self, flight_data):
         self.producer.send(self.topic, flight_data)
-        time.sleep(1)
+        time.sleep(2)
         self.producer.flush()
         print("Flight data sent to Kafka")
 
@@ -84,7 +84,7 @@ def main():
     
     if not data.empty:
         kafka_config = {
-            'bootstrap.servers': 'kafka:29092',
+            'bootstrap.servers': 'kafka1:29092',
         }
         kafka_producer = FlightKafkaProducer(kafka_config, 'flights')
         

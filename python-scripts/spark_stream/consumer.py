@@ -56,7 +56,7 @@ class FlightDelayPredictor:
         """Tạo Kafka stream"""
         return (self.spark.readStream
                 .format("kafka")
-                .option("kafka.bootstrap.servers", "kafka:29092")
+                .option("kafka.bootstrap.servers", "kafka1:29092")
                 .option("subscribe", self.kafka_topic)
                 .option("startingOffsets", "latest")
                 .option("kafka.security.protocol", "PLAINTEXT")
@@ -125,7 +125,7 @@ class FlightDelayPredictor:
             kafka_stream = self.create_kafka_stream()
 
             # Load model đã được train
-            model_path = "hdfs://namenode:8020/models/flight_delay_prediction"
+            model_path = "hdfs://namenode:8020/models/rf_model"
             model = PipelineModel.load(model_path)
 
             # Xử lý stream và thực hiện dự đoán

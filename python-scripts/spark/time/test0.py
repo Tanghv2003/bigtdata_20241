@@ -9,7 +9,7 @@ from pyspark.sql.window import Window
 
 # Initialize Spark session with local mode for testing
 spark = SparkSession.builder \
-    .appName("3 worker * 1 executor * 2 core - df partition") \
+    .appName("3 worker * 1 executor * 2 core") \
     .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:3.0.2") \
     .master("spark://spark-master:7077") \
     .getOrCreate()

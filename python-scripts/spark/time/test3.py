@@ -7,32 +7,40 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql.window import Window
 
-# Initialize Spark session with local mode for testing and partition settings
+# Initialize Spark session with local mode for testing
+from pyspark.sql import SparkSession
+
+# Khởi tạo Spark session với cấu hình cho 3 worker, mỗi worker có 2 executors, mỗi executor có 1 core
 spark = SparkSession.builder \
-    .appName("3 worker * 1 executor * 2 core - 100000 partition") \
+    .appName("3 worker * 2 executor * 1 core ") \
     .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:3.0.2") \
-    .config("spark.sql.shuffle.partitions", "100000") \
-    .config("spark.default.parallelism", "100000") \
-    .master("spark://spark-master:7077") \
+    .config("spark.master", "spark://spark-master:7077") \
+    .config("spark.executor.instances", "6") \
+    .config("spark.executor.cores", "1") \
+    .config("spark.cores.max", "6") \
+    .config("spark.executor.memory", "512mb") \
     .getOrCreate()
+
+# Tiến hành các phép biến đổi và hành động trên DataFrame của bạn...
+
+
+# # Set log level to show more details
+# spark.sparkContext.setLogLevel("INFO")
 
 # HDFS file path
 hdfs_file_path = "hdfs://namenode:8020/upload/data.csv"
 
-# Enhanced error handling for reading CSV with partitioning
+# Enhanced error handling for reading CSV+
 try:
-    # Read the data into a DataFrame with specified number of partitions
-    df = spark.read \
-        .option("header", "true") \
-        .csv(hdfs_file_path) \
-        .repartition(100000)
+    # Read the data into a DataFrame
+    df = spark.read.option("header", "true").csv(hdfs_file_path)
 except Exception as e:
     raise e
 
 # Improved data transformation with error handling for time fields
 def transform_dataframe(df):
     try:
-        transformed_df = df \
+        return df \
             .withColumn("FL_DATE", to_timestamp(col("FL_DATE"))) \
             .withColumn("DEP_DELAY", col("DEP_DELAY").cast("double")) \
             .withColumn("ARR_DELAY", col("ARR_DELAY").cast("double")) \
@@ -56,11 +64,12 @@ def transform_dataframe(df):
                     expr("cast(substring(concat('0', DEP_TIME), 1, 2) as int)"))
                 .otherwise(lit(0))
             )
-        return transformed_df.repartition(100000)  # Ensure consistent partitioning after transformation
     except Exception as e:
         raise e
 
 df = transform_dataframe(df)
+
+
 
 # 1. Carrier Performance Analysis
 try:
@@ -84,11 +93,13 @@ try:
         round((sum(when(col("ARR_DELAY").cast("double") <= 0, 1).otherwise(0)) / count("*") * 100), 2).alias("on_time_performance"),
         round(avg(when(col("ARR_DELAY").cast("double") > 15, 1).otherwise(0)) * 100, 2).alias("significant_delay_percentage"),
         round(avg(col("ACTUAL_ELAPSED_TIME").cast("double") - col("CRS_ELAPSED_TIME").cast("double")), 2).alias("avg_time_deviation")
-    ).repartition(100000).cache()
+    ).cache()
 
     print("1\n")
+    # Display the result
     carrier_stats.show()
 
+    
 except Exception as e:
     raise e
 
@@ -104,10 +115,12 @@ try:
             round(avg("ARR_DELAY"), 2).alias("avg_arrival_delay"),
             round(stddev("ARR_DELAY"), 2).alias("delay_variability"),
             round(avg(col("CANCELLED")), 4).alias("cancellation_rate")
-        ).repartition(100000).cache()
+        ).cache()
     print("2\n")
+    # Display the result
     route_stats.show()
 
+   
 except Exception as e:
     raise e
 
@@ -119,19 +132,22 @@ try:
         round(avg("NAS_DELAY"), 2).alias("avg_nas_delay"),
         round(avg("SECURITY_DELAY"), 2).alias("avg_security_delay"),
         round(avg("LATE_AIRCRAFT_DELAY"), 2).alias("avg_late_aircraft_delay")
-    ).repartition(100000).cache()
+    ).cache()
     print("3\n")
+    # Display the result
     delay_analysis.show()
 
+#     write_to_mongodb(delay_analysis, "delay_type_analysis")
 except Exception as e:
     raise e
 
 # 4. Airport Performance
 try:
+    # Optimize memory by selecting only needed columns
     df_airport = df.select("ORIGIN", "DEP_DELAY", "TAXI_OUT", "TAXI_IN", "CANCELLED", "OP_CARRIER", "DEST") \
-                  .na.fill(0, ["DEP_DELAY", "TAXI_OUT", "TAXI_IN", "CANCELLED"]) \
-                  .repartition(100000)
+                  .na.fill(0, ["DEP_DELAY", "TAXI_OUT", "TAXI_IN", "CANCELLED"])
     
+    # Split the aggregations into smaller chunks
     base_metrics = df_airport.groupBy("ORIGIN").agg(
         count("*").alias("total_departures"),
         round(avg(col("DEP_DELAY").cast("double")), 2).alias("avg_departure_delay"),
@@ -150,13 +166,14 @@ try:
         round(stddev(col("DEP_DELAY").cast("double")), 2).alias("departure_delay_std")
     )
     
+    # Join all metrics together
     airport_stats = base_metrics.join(carrier_metrics, "ORIGIN") \
                                .join(delay_metrics, "ORIGIN") \
-                               .orderBy(col("total_departures").desc()) \
-                               .repartition(100000)
+                               .orderBy(col("total_departures").desc())
     print("4\n")
     airport_stats.limit(5).show()
-
+    
+    #write_to_mongodb(airport_stats, "airport_performance")
 except Exception as e:
     raise e
 
@@ -171,10 +188,11 @@ try:
         round(avg("ARR_DELAY"), 2).alias("avg_arrival_delay"),
         round(avg("DEP_DELAY"), 2).alias("avg_departure_delay"),
         round(avg(col("CANCELLED")), 4).alias("cancellation_rate")
-    ).na.fill(0).repartition(100000).cache()
+    ).na.fill(0).cache()
     print("5\n")
     time_analysis.show()
 
+    # write_to_mongodb(time_analysis, "time_based_analysis")
 except Exception as e:
     raise e
 
@@ -194,10 +212,11 @@ try:
         round(avg(col("CARRIER_DELAY")), 2).alias("avg_carrier_delay"),
         round(avg(col("WEATHER_DELAY")), 2).alias("avg_weather_delay"),
         round(avg(col("CANCELLED")), 4).alias("cancellation_rate")
-    ).repartition(100000).cache()
-    print("6\n")
+    ).cache()
+    print("1\n")
     distance_analysis.show()
 
+    # write_to_mongodb(distance_analysis, "distance_based_analysis")
 except Exception as e:
     raise e
 
@@ -213,15 +232,17 @@ try:
         "OP_CARRIER"
     ).groupBy("OP_CARRIER", "DELAY_CATEGORY").agg(
         count("*").alias("flight_count")
-    ).repartition(100000).cache()
+    ).cache()
     print("7\n")
     delay_severity.show()
 
+    # write_to_mongodb(delay_severity, "delay_severity_analysis")
 except Exception as e:
     raise e
 
 # 8. Performance Metrics
 try:
+    # Use the cleaned DataFrame
     performance_metrics = df_clean.agg(
         count("*").alias("total_flights"),
         round(avg(col("ARR_DELAY").cast("double")), 2).alias("overall_avg_arrival_delay"),
@@ -231,10 +252,11 @@ try:
         round(avg(col("CANCELLED").cast("double")), 4).alias("overall_cancellation_rate"),
         round(avg(col("DIVERTED").cast("double")), 4).alias("overall_diversion_rate"),
         round((sum(when(col("ARR_DELAY").cast("double") <= 0, 1).otherwise(0)) / count("*") * 100), 2).alias("on_time_percentage")
-    ).repartition(100000).cache()
+    ).cache()
     print("8\n")
     performance_metrics.show()
 
+    # write_to_mongodb(performance_metrics, "overall_performance_metrics")
 except Exception as e:
     raise e
 
